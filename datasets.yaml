@@ -1,0 +1,187 @@
+exposure_raw:
+    type: dataset
+    data_unit: visit+ccd+snap+atmospheric
+    description: >
+        Raw images from science CCDs.
+
+calibration_products:
+    type: dataset-placeholder
+    description: >
+        Flat/bias/dark frames, brighter-fatter coefficients, small-scale pixel-area transformations, and other stuff that comes out of the calibration products pipeline.
+
+instrument_state_data:
+    type: dataset-placeholder
+    data_unit: visit
+    description: >
+        Information from the observatory and camera about the state of the system, e.g. telescope position, CCD temperature, weather.
+
+refcat_astro:
+    type: dataset
+    data_unit: sky
+    description: >
+        External reference catalog used to determine absolute astrometry.
+
+refcat_photo:
+    type: dataset
+    data_unit: sky
+    description: >
+        External reference catalog used to determine absolute photometry.
+
+exposure_detrended:
+    type: dataset
+    data_unit: visit+ccd
+    description: >
+        Science and variance pixel values for a single-visit CCD image, including both snaps.  Mask is tracked separately, as it will be updated on different timescales.  Background is subtracted, but the background model will be tracked separately and can be added back in exactly.  The image will have been resampled to correct for small-scale pixel size variations, and the photometric scaling chosen to match the sky spectrum.
+
+mask_initial:
+    type: dataset
+    data_unit: visit+ccd
+    description: >
+        Pixel masks determined from single-visit processing, including cosmic rays, defects from ISR, saturation, and initial single-frame detections.
+
+background_initial:
+    type: dataset
+    data_unit: visit+ccd
+    description: >
+        Background model determined from single-visit processing.  Probably stored per CCD, but should correspond to a full-visit fit.
+
+psf_initial:
+    type: dataset
+    data_unit: visit+ccd
+    description: >
+        PSF model from single-visit processing, probably estimated on a single CCD using simple discrete-kernel interpolation methods (e.g. PSFEx).  No wavelength dependence.
+
+wcs_initial:
+    type: dataset
+    data_unit: visit+ccd
+    description: >
+        Mapping from CCD coordinates to sky coordinates, determined from a full-visit fit to the astrometric reference catalog.  No attempt to account for chromatic effects like DCR.  Appropriate for use with exposure_detrend, so if that has already been resampled to account for small-scale pixel-size variations, that part of the mapping should not be included here.
+
+throughput_initial:
+    type: dataset
+    description: >
+        Photometric scaling function (possibly a scalar per CCD) determined by either a CCD or visit-level fit to the photometric reference catalog.  Does not attempt to account for wavelength-dependent calibration terms.
+
+psf_star_catalog:
+    type: dataset
+    data_unit: sky
+    description: >
+        A catalog of securely-classified stars to use in PSF estimation.  Must include true positions (as measured from the average of multiple epochs), proper motion and parallax, and best-estimate SEDs (inferred from colors).  Will include as much information from external catalogs (at least Gaia), but will also need to be extended with LSST data.
+
+wcs_final:
+    type: dataset
+    data_unit: sky
+    description: >
+        Mapping from CCD coordinates to sky coordinates, determined from a multi-visit simultaneous fit and all available calibration products.  Should be defined for some nominal wavelength or SED in each band, so subsequence PSF models can account for chromatic shifts from that baseline.  Appropriate for use with exposure_detrend, so if that has already been resampled to account for small-scale pixel-size variations, that part of the mapping should not be included here.
+
+throughput_final:
+    type: dataset
+    description: >
+        Photometric scaling function determined from a multi-visit simultaneous fit and all available calibration products.  Should be a function of wavelength and/or SED, baselined to some nominal wavelength or SED in each filter.
+
+wavefront_data:
+    type: dataset-placeholder
+    data_unit: visit
+    description: >
+        Data products from reduction of wavefront sensors.  Details TBD.
+
+guide_data:
+    type: dataset-placeholder
+    data_unit: visit
+    description: >
+        Data products from reduction of guide sensors.  Details TBD.
+
+psf_basis:
+    type: dataset-placeholder
+    description: >
+        A characterization of how different observing conditions and instrument state translate to point-spread functions, as determined from a previous reduction of stellar field exposures taken over a range of conditions and times.  Details TBD.
+
+psf_model_final:
+    type: dataset
+    data_unit: visit
+    description: >
+        Best PSF model, including wavelength dependence and possibly uncertainty estimates.  Kernel images will be centered only for a nominal wavelength or SED.
+
+coadd_pm:
+    type: dataset
+    data_unit: tract+patch+filter
+    description: >
+        A set of PSF-matched coadd images, built by matching PSFs prior to combination with some some of light outlier rejection.  Includes only exposures with sufficiently good seeing.  Built with background matching, with the final (reference) background subtracted as well.  Contains extra information to account for wavelength variation within a filter (e.g. multiple images for a few nominal SEDs), with details TBD.
+
+background_diff_pm:
+    type: dataset
+    data_unit: tract+patch+visit
+    description: >
+        Model of the difference in background between a particular visit and the reference for its patch, as measured on a difference of warped, PSF-matched visit images before coaddition.
+
+background_coadd_pm:
+    type: dataset
+    data_unit: tract+patch+filter
+    description: >
+        Model of the reference background, measured on the PSF-matched coadd.
+
+src_dia:
+    type: dataset
+    data_unit: tract+visit+ccd
+    description: >
+        Catalog of detections from image differences.  May contain only secure detections or detections and artifacts with the latter appropriately flagged.
+
+exposure_dia:
+    type: dataset
+    data_unit: tract+visit+ccd
+    description: >
+        Image of the difference between an exposure and a PSf-matched template.
+
+mask_dia:
+    type: dataset
+    data_unit: tract+visit+ccd
+    description: >
+        Pixel mask generated from detections in image differences.  This will include at least som ereal sources as well as artifacts.  Also includes all masks from mask_initial.
+
+object_ss:
+    type: dataset
+    data_unit: sky
+    description: >
+        Solar system objects and their orbits.
+
+coadd_lik:
+    type: dataset
+    data_unit: tract+patch+filter(+date)
+    description: >
+        Optimal/likelihood/Kaiser coadd containing all input images, or all input images within a specific date range.  PSF on the coadd is varying and modeled by psf_coadd_lik dataset.  Built with background matching, with the final (reference) background subtracted as well.  Contains extra information to account for wavelength variation within a filter (e.g. multiple images for a few nominal SEDs), with details TBD.
+
+background_coadd_lik:
+    type: dataset
+    data_unit: tract+patch+filter(+date)
+    description: >
+        Model of the reference background, measured on the likelihood coadd.
+
+psf_coadd_lik:
+    type: dataset
+    data_unit: tract+patch+filter
+    description: >
+        PSF model for coadd_lik images, generating by appropriately combining the PSF models of all input images.  May be compute on-the-fly or evaluated on every coadd pixel with some form of compression.
+
+object_coadd:
+    type: dataset
+    data_unit: tract+patch
+    description: >
+        Object catalog containing object definitions, parent/child relationships, detection and deblending flags, and coadd measurements.  A nominal SED (based on measured colors) will also be selected for PSF model evaluation and detailed throughput calculations.
+
+deblend_models:
+    type: dataset
+    data_unit: tract+patch+filter
+    description: >
+        Object catalog containing models or HeavyFootprints that can be used to force-deblend objects in individual exposures.
+
+object_multifit:
+    type: dataset
+    data_unit: tract+patch
+    description: >
+        Object catalog with measurements derived from simultaneous fitting to all exposures, including Monte Carlos samples for each object.
+
+src_forced:
+    type: dataset
+    data_unit: tract+patch+visit
+    description: >
+        Source catalog containing per-exposure fluxes using positions and other structural parameters determined from all exposures that contribute to that posiiton (or, for solar-system objects, positions determined by MOPS).

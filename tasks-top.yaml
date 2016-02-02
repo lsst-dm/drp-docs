@@ -1,0 +1,175 @@
+process_visit:
+    type: task
+    inputs:
+        - exposure_raw
+        - calibration_products
+        - instrument_state_data
+        - refcat_astro
+        - refcat_photo
+    outputs:
+        - exposure_detrended
+        - mask_initial
+        - background_initial
+        - psf_initial
+        - src
+        - wcs_initial
+        - throughput_initial
+    parallelization:
+        min_data_unit: amp
+        max_data_unit: visit
+        description: >
+            After some initial work at amp-level, aggregate to CCDs, where most of the work will be, with several full-visit sequence points.
+    description: >
+        Perform basic detrending, fit initial background, PSF, WCS, and throughput models (all monochromatic), and create an initial mask from CR detections and known bad pixels in the sensors.  Perform measurements necessary to feed multi-epoch calibration.
+
+multi_epoch_calibration:
+    type: task
+    inputs:
+        - src
+        - wcs_initial
+        - throughput_initial
+        - refcat_astro
+        - refcat_photo
+    outputs:
+        - psf_star_catalog
+        - wcs_final
+        - throughput_final
+    parallelization:
+        min_data_unit: tract
+        max_data_unit: tract
+        description: >
+            After some initial basic catalog manipulation and a big cross-match, the remainder of this task is an iteration over a sparse matrix factorization with small updates to the matrix.  Within a tract, this will likely be parallelized over a single node simply using a parallel sparse linear algebra library.
+    variants:
+        no_psf_star_catalog: >
+            We may need to do some deep image processing to generate a PSF star catalog sufficient for PSF estimation.  This may involve shaking up the ordering of coaddition and PSF modeling stages, or it may involve using outputs from a previous data release to feed the current one.  In that case, this task will not be responsible for generating psf_star_catalog.
+
+psf_estimation_final:
+    type: task
+    inputs:
+        - psf_star_catalog
+        - exposure_detrended
+        - wavefront_data
+        - guide_data
+        - instrument_state_data
+        - psf_basis
+    outputs:
+        - psf_model_final
+    parallelization:
+        min_data_unit: ccd
+        max_data_unit: visit
+        description: >
+            After some initial processing to extract postage stamps from CCDs, this is essentially a full-visit fit.  Will probably involve some parallel linear algebra and some model evaluation parallelized over postage stamps.
+    description: >
+        Compute best estimate of the point spread function using a decomposition into optical and atmospheric components.  Optical component (at least) will likely be represented in wavefront space, constrained using wavefront sensor data, stars from science sensors,and potentially other information about the state of the system.  Atmospheric component will likely be entirely empirical, aside from a prior on the correlation function of spatial variation.  Input star catalog must include full depth star/galaxy/binary classification, true positions (i.e. corrected for proper motion), and SEDs.
+    variants:
+        use_galaxies: >
+            Use differences across multiple images of the same galaxies to constrain the difference in PSFs.  May be important for constraining the PSF model on small spatial scales.  Data unit is problematic; would ideally solve for PSFs of all overlapping visits simultaneously, which would extend to the entire survey. Perhaps represent as a patch+visit perturbation, since galaxies should not contain any additional information about large spatial scales.
+        probabilistic: >
+            In addition to building a best-fit model for the PSF, we also model its uncertainty, and marginalize over this during measurement.  Unclear whether we'd want a Monte Carlo or Fisher-matrix approach, or even whether this is needed.
+
+build_coadd_pm:
+    type: task
+    inputs:
+        - exposure_detrended
+        - wcs_final
+        - throughput_final
+    outputs:
+        - coadd_pm
+        - background_diff_pm
+        - background_coadd_pm
+    parallelization:
+        min_data_unit: ccd
+        max_data_unit: tract+patch+filter
+        description: >
+            Aggregate all ccds in a visit that overlap a patch by warping and matching to a patch+visit temporary image.  Aggregate all visits within a patch by adding them together (nonlinear due to outlier rejection - can't just accumulate).  Could assign a CCD to a core and then a segment of a patch to each core, or could use lightweight threads to just parallelize over pixels in all operations.
+    description: >
+        Warp and PSF-match exposures to the coadd coordinate system and a model PSF, rejecting those with PSFs larger than the target PSF.  Subtract these warped images, and estimate backgrounds on the differences.  All images are included in background matching, even if rejected from the final coadd.  DCR correction (detail TBD) must be included in the matching, and for now I envision that generating multiple coadds corresponding to different SEDs.  After building the coadd, we estimate the residual background.
+
+image_subtraction:
+    type: task
+    inputs:
+        - exposure_detrended
+        - mask_initial
+        - wcs_final
+        - throughput_final
+        - psf_final
+        - coadd_pm
+    outputs:
+        - src_dia
+        - exposure_dia
+        - mask_dia
+    parallelization:
+        min_data_unit: ccd+tract
+        max_data_unit: ccd+tract
+        description: >
+            Strictly data-parallel over CCDs, with CCDs in tract overlap regions potentially processed twice.
+    description: >
+        Convolve template (coadd_pm) images to match the PSF of a single target exposure, then subtract them.  Detect and measure on the difference image.  Classify detections and generate mask plane from artifact detections.
+
+mops:
+    type: task
+    inputs:
+        - src_dia
+    outputs:
+        - object_ss
+    description: >
+        Given positions and trailing information from difference image measurements, combine detections and fit orbits to generate solar system objects.
+
+build_coadd_lik:
+    type: task
+    inputs:
+        - exposure_detrended
+        - mask_dia
+        - wcs_final
+        - psf_final
+        - throughput_final
+        - background_diff_pm
+    outputs:
+        - coadd_lik
+        - background_coadd_lik
+        - psf_coadd_lik
+    parallelization:
+        min_data_unit: ccd
+        max_data_unit: tract+patch+filter
+        description: >
+            Aggregate all ccds in a visit that overlap a patch by warping and matching to a patch+visit temporary image.  Aggregate all visits within a patch by adding them together (nonlinear due to outlier rejection - can't just accumulate).  Could assign a CCD to a core and then a segment of a patch to each core, or could use lightweight threads to just parallelize over pixels in all operations.
+    description: >
+        Warp and convolve exposures to the coadd coordinate system and optimal PSF for combination, then combine with masking but no outlier rejection.  DCR correction (detail TBD) must be included, and for now I envision that generating multiple coadds corresponding to different SEDs.  Difference backgrounds estimated during PSF-matched coaddition will be reused here, but after building the coadd, we will re-estimate the residual background.  All exposures whose PSFs can be characterized accurately should be included.  A model of the coadd PSF will be built either as part of this process or on-the-fly when evaluated at a point.  Input exposures will be sorted by date and combined in groups before being combined overall, generating coadds for certain time periods (details TBD) in the process.
+
+process_coadd:
+    type: task
+    inputs:
+        - coadd_lik
+        - psf_coadd_lik
+        - coadd_pm
+        - src_dia
+        - object_ss
+    outputs:
+        - object_coadd
+        - deblend_models
+    parallelization:
+        min_data_unit: tract+patch+filter+date
+        max_data_unit: tract+patch
+        description: >
+            Same spatial scale (one patch) for all operations, but with different combinations of images (filters, date ranges).  Within the patch, we probably just want to use lightweight threads to parallelize over pixels.  We could probably also do heavyweight threads and parallelize over blend families, but the large variation in size among blend families makes that difficult.
+    description: >
+        Detect on likelihood coadd images (both full-depth and date-range), and cross-band combinations of coadds optimized for a set of SEDs.  Merge footprints and peaks from all coadd detections, as well as peaks from image differences and MOPS.   Deblend using pixel values from full-depth single-band likelihood coadds (but across all bands simultaneously), assuming PSF templates and fixed positions for variable/transient/moving sources.  After detection, run measurement algorithms on both likelihood coadds and PSF-matched coadds.  Includes deduplication of sources in at least patch overlap regions.
+
+multifit:
+    type: task
+    inputs:
+        - exposure_detrended
+        - psf_final
+        - wcs_final
+        - throughput_final
+        - mask_dia
+    outputs:
+        - object_multifit
+        - src_forced
+    parallelization:
+        min_data_unit: object
+        max_data_unit: family
+        description: >
+            We'll have an outer loop over blend families and many tight inner loops over the sections of CCDs they overlap.  Blend families will vary considerably in size, so we'll need to think about load-balancing.
+    description: >
+        Measure objects by fitting simultaneously to all exposures.  At least some fitting will be cross-band, but some may be within a single band.  Fitting may use deblend models to forced-deblend before a fit with a different model, or fit all objects in blend families simultaneously as well.  Also fit models that include an independent amplitude for each exposure (effectively forced photometry).
