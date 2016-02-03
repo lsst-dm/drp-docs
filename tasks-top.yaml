@@ -14,6 +14,9 @@ process_visit:
         - src
         - wcs_initial
         - throughput_initial
+    references:
+        dpdd: >
+            Section 5.2, "Single Frame Processing".  No conflict, but DPDD is vague.
     parallelization:
         min_data_unit: amp
         max_data_unit: visit
@@ -34,6 +37,9 @@ multi_epoch_calibration:
         - psf_star_catalog
         - wcs_final
         - throughput_final
+    references:
+        dpdd: >
+            Section 5.2, "Relative Calibration".  No conflict, but more scope here than DPDD.
     parallelization:
         min_data_unit: tract
         max_data_unit: tract
@@ -54,6 +60,9 @@ psf_estimation_final:
         - psf_basis
     outputs:
         - psf_model_final
+    references:
+        dpdd: >
+            Section 5.2: should be included but isn't; probably assumed to be part of "Single Frame Measurement", which isn't possible due to the dependency of psf_star_catalog.
     parallelization:
         min_data_unit: ccd
         max_data_unit: visit
@@ -77,6 +86,9 @@ build_coadd_pm:
         - coadd_pm
         - background_diff_pm
         - background_coadd_pm
+    references:
+        dpdd: >
+            Section 5.2: "Coadd Creation" mentioned, but not PSF-matched coadds.
     parallelization:
         min_data_unit: ccd
         max_data_unit: tract+patch+filter
@@ -98,6 +110,9 @@ image_subtraction:
         - src_dia
         - exposure_dia
         - mask_dia
+    references:
+        dpdd: >
+            Section 4.3.5: Part of Level 1 Reprocessing.  Description there includes processing exposures taken after the start of the DRP processing, which may be inconsistent with dependencies listed here.
     parallelization:
         min_data_unit: ccd+tract
         max_data_unit: ccd+tract
@@ -112,6 +127,9 @@ mops:
         - src_dia
     outputs:
         - object_ss
+    references:
+        dpdd: >
+            Section 4.3.5: Part of Level 1 Reprocessing.  Description there includes processing exposures taken after the start of the DRP processing, which may be inconsistent with dependencies listed here.
     description: >
         Given positions and trailing information from difference image measurements, combine detections and fit orbits to generate solar system objects.
 
@@ -128,6 +146,9 @@ build_coadd_lik:
         - coadd_lik
         - background_coadd_lik
         - psf_coadd_lik
+    references:
+        dpdd: >
+            Section 5.2: "Coadd Creation" mentioned, but description assumes direct coadds in which we have to choose between PSF quality and depth - with the right algorithm, we expect to be able to optimize both.
     parallelization:
         min_data_unit: ccd
         max_data_unit: tract+patch+filter
@@ -147,6 +168,9 @@ process_coadd:
     outputs:
         - object_coadd
         - deblend_models
+    references:
+        dpdd: >
+            Section 5.2: this task encompasses "Coadd source detection and characterization" and "Association and deblending".  The lines between these operations are somewhat fuzzier than the DPDD implies.
     parallelization:
         min_data_unit: tract+patch+filter+date
         max_data_unit: tract+patch
@@ -166,6 +190,9 @@ multifit:
     outputs:
         - object_multifit
         - src_forced
+    references:
+        dpdd: >
+            Section 5.2: this task encompasses both "Multi-epoch object characterization" and "Forced Photometry".
     parallelization:
         min_data_unit: object
         max_data_unit: family
